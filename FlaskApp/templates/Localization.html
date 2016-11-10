@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<title>Localization</title>
+		<link rel="shortcut icon" href="{{ url_for('static', filename='favicon.ico') }}">
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+		<style>
+			body {
+				margin: 0px;
+				overflow: hidden;
+				background-image: linear-gradient(#4F6268,#8FAEB8,#4F6268); /* Background colors HEX */
+			}
+		</style>
+	</head>
+	<body>
+		<script src="{{url_for('static', filename='three.js')}}"></script>
+		<script src="{{url_for('static', filename='OrbitControls.js')}}"></script>
+		<script src="{{url_for('static', filename='TextGeometry.js')}}"></script>
+		<script src="{{url_for('static', filename='FontUtils.js')}}"></script>
+		<script src="{{url_for('static', filename='helvetiker_regular.typeface.js')}}"></script>
+		<script src="{{url_for('static', filename='localization.js')}}"></script>
+		<script src="{{url_for('static', filename='jquery-3.1.1.min.js')}}"></script>
+		<script>
+			var serverResponse, selectedSpeaker, responseLabel;
+			var userInput = [];
+			var responseCount = 0;
+			var camera, scene, renderer, controls;
+			var mesh, raycaster, mouse;
+			var intersects = [];
+			var speakers = [];
+			var texts = [];
+			var waitMessage;
+			var xhr = new XMLHttpRequest();
+
+			// GUI Options
+			var speakerColor = yellowColor;
+			var selectedSpeakerColor = lightGreenColor;
+			var speakerHeight = 40;
+			var speakerWidth = 25;
+			var speakerDepth = 20;
+
+			init();
+			animate();
+
+			function init() {
+				camera = new THREE.PerspectiveCamera( 70, window.innerWidth / window.innerHeight, 1, 10000 );
+				camera.position.set(0, 200, -500);
+				scene = new THREE.Scene();
+
+				// Add speaker to scene
+				num_of_speakers = 15;
+				speaker_info = get_speaker_info(300, 10, num_of_speakers);
+				positions = speaker_info.positions;
+				rotations = speaker_info.rotations;
+				labels = speaker_info.labels;
+				var speaker_geo = new THREE.BoxGeometry( speakerWidth, speakerHeight, speakerDepth );
+
+				for (var i = 0; i < positions.length; i++) {
+					var speaker_mat = new THREE.MeshLambertMaterial( { color: speakerColor } );
+					mesh = new THREE.Mesh( speaker_geo, speaker_mat );
+					mesh.label = labels[i];
+					mesh.position.set(positions[i][0], positions[i][1], positions[i][2]);
+					mesh.rotation.y = rotations[i];
+					scene.add( mesh );
+					speakers.push( mesh );
+					label_coor = [positions[i][0], positions[i][1] + speakerHeight, positions[i][2]];
+					var l = label.add(label_coor, labels[i], size=20, color=redColor, bevel=true);
+					l.lookAt(camera.position);
+				};
+
+				label.add([250,200,100], "Please select speaker", size=40)
+				label.add([200,-400,100], ".  .  .  p  s  y  l  a  b  ©  .  .  .", size=25)
+
+				var light = new THREE.PointLight(0xffffff, 1.5);
+				light.position.set(0, 200, -500);
+				scene.add(light);
+
+				renderer = new THREE.WebGLRenderer({ alpha: true });
+				renderer.setPixelRatio( window.devicePixelRatio );
+				renderer.setSize( window.innerWidth, window.innerHeight );
+				//renderer.setClearColor(backgroundColor);
+				document.body.appendChild( renderer.domElement );
+				controls = new THREE.OrbitControls(camera, renderer.domElement);
+				raycaster = new THREE.Raycaster();
+				mouse = new THREE.Vector2();
+				window.addEventListener( 'resize', onWindowResize, false );
+				document.addEventListener( 'mousedown', onDocumentMouseDown, false );
+			}
+
+			function onWindowResize() {
+				camera.aspect = window.innerWidth / window.innerHeight;
+				camera.updateProjectionMatrix();
+				renderer.setSize( window.innerWidth, window.innerHeight );
+			}
+
+			function animate() {
+				requestAnimationFrame( animate );
+				// Add animation here
+				renderer.render( scene, camera );
+				controls.update();
+			}
+
+			function resetSelection(){intersects[ 0 ].object.material.color.setHex(speakerColor);};
+			function resetAllSelections(){
+				for (var i = 0; i < speakers.length; i++) {
+					speakers[i].material.color.setHex(speakerColor);
+				}
+			};
+			function getMessage(){
+				if( waitMessage !== undefined){ waitMessage.visible = false };
+				if(serverResponse.status === 200){
+					var msg = "Speaker # " + selectedSpeaker + " selected, please wait..."
+					responseCount += 1;
+					waitMessage = label.add([250,100,100], msg, size=20);
+					if (responseLabel !== undefined) {
+						scene.remove(responseLabel);
+					}
+					responseLabel = label.add([80, -210, 0], "Responses: " + responseCount, size=18);
+					userInput.push(selectedSpeaker);
+					console.log('Speaker selected: ' + selectedSpeaker);
+				} else{
+					var msg = "Server is down! Please wait for a while and select again."
+					waitMessage = label.add([250,100,100], msg, size=20, color=blackColor);
+				}
+			}
+			function removeMessage(){waitMessage.visible = false};
+
+			function onDocumentMouseDown( event ) {
+				resetAllSelections();
+				event.preventDefault();
+				mouse.x = ( event.clientX / renderer.domElement.clientWidth ) * 2 - 1;
+				mouse.y = - ( event.clientY / renderer.domElement.clientHeight ) * 2 + 1;
+				raycaster.setFromCamera( mouse, camera );
+				intersects = raycaster.intersectObjects( speakers );
+				if ( intersects.length > 0 ) {
+					intersects[ 0 ].object.material.color.setHex( Math.random() * 0xffffff );
+					intersects[ 0 ].object.material.color.setHex(selectedSpeakerColor);
+					selectedSpeaker = intersects[0].object.label
+					var data = {'label': selectedSpeaker}
+					serverResponse = $.post( "/postmethod", data);
+					// console.log(serverResponse);
+					// console.log(selectedSpeaker);
+					setTimeout(getMessage, 100);
+					setTimeout(resetSelection, 4000);
+					setTimeout(removeMessage, 4000);
+				}
+			}
+
+		</script>
+	</body>
+</html>
